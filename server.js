@@ -2,11 +2,13 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
-
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+require('dotenv').config(); // To load environment variables
 
 // Initialize the Express app
 const app = express();
-const PORT = 5000;
+const PORT = process.env.PORT || 5000; // Default to port 5000 or use environment variable for production
 
 // Middleware to parse JSON data
 app.use(bodyParser.json());
@@ -15,9 +17,6 @@ app.use(bodyParser.json());
 app.use(cors());
 
 // Connect to MongoDB (Digital Ocean Cloud MongoDB)
-
-require('dotenv').config(); // This will load the .env file and make the variables available
-
 const mongoose = require('mongoose');
 const mongoURI = process.env.MONGO_URI; // Get the MongoDB URI from .env file
 
@@ -25,25 +24,49 @@ mongoose.connect(mongoURI, { useNewUrlParser: true, useUnifiedTopology: true })
   .then(() => console.log('Connected to MongoDB'))
   .catch((err) => console.log('MongoDB connection error:', err));
 
-  
-// Define a User schema
+// Define a User schema with bcryptjs for password hashing
 const userSchema = new mongoose.Schema({
-  userId: { type: String, required: true },
+  userId: { type: String, required: true, unique: true },
   password: { type: String, required: true },
+});
+
+// Pre-save hook to hash password before saving it to DB
+userSchema.pre('save', async function(next) {
+  if (this.isModified('password')) {
+    this.password = await bcrypt.hash(this.password, 10);
+  }
+  next();
 });
 
 const User = mongoose.model('User', userSchema);
 
-// Seed default user into the database
-(async () => {
-  const existingUser = await User.findOne({ userId: 'Ajay' });
-  if (!existingUser) {
-    await User.create({ userId: 'Ajay', password: 'Ajay@9164' });
-    console.log('Default user created');
-  }
-})();
+// Register API Endpoint
+app.post('/register', async (req, res) => {
+  const { userId, password } = req.body;
 
-// Login API endpoint
+  // Validate input
+  if (!userId || !password) {
+    return res.status(400).json({ message: 'User ID and password are required.' });
+  }
+
+  try {
+    // Check if userId already exists
+    const existingUser = await User.findOne({ userId });
+    if (existingUser) {
+      return res.status(400).json({ message: 'User ID already exists. Please choose another one.' });
+    }
+
+    // Create a new user
+    const newUser = new User({ userId, password });
+    await newUser.save();
+
+    return res.status(201).json({ message: 'User registered successfully!' });
+  } catch (err) {
+    return res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+// Login API Endpoint
 app.post('/login', async (req, res) => {
   const { userId, password } = req.body;
 
@@ -52,12 +75,22 @@ app.post('/login', async (req, res) => {
     return res.status(400).json({ message: 'User ID and password are required.' });
   }
 
-  // Check credentials
   try {
-    const user = await User.findOne({ userId, password });
+    // Find user by userId
+    const user = await User.findOne({ userId });
 
-    if (user) {
-      return res.status(200).json({ message: 'Login successful!' });
+    if (!user) {
+      return res.status(401).json({ message: 'Invalid credentials.' });
+    }
+
+    // Compare password with hashed password stored in DB
+    const isMatch = await bcrypt.compare(password, user.password);
+
+    if (isMatch) {
+      // Generate JWT token
+      const token = jwt.sign({ userId: user.userId }, 'your_jwt_secret_key', { expiresIn: '1h' });
+
+      return res.status(200).json({ message: 'Login successful!', token });
     } else {
       return res.status(401).json({ message: 'Invalid credentials.' });
     }
