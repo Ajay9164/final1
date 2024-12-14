@@ -2,7 +2,7 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
-const mongoose = require('mongoose');
+
 
 // Initialize the Express app
 const app = express();
@@ -15,10 +15,17 @@ app.use(bodyParser.json());
 app.use(cors());
 
 // Connect to MongoDB (Digital Ocean Cloud MongoDB)
-const mongoURI = 'mongodb+srv://login_api:eD1Fb9jM2803vJ76@appointment-db-c887a00a.mongo.ondigitalocean.com/login?replicaSet=appointment-db&tls=true&authSource=admin';
-mongoose.connect(mongoURI)
-  .then(() => console.log('Connected to Digital Ocean MongoDB'))
-  .catch((err) => console.error('Error connecting to MongoDB:', err));
+
+require('dotenv').config(); // This will load the .env file and make the variables available
+
+const mongoose = require('mongoose');
+const mongoURI = process.env.MONGO_URI; // Get the MongoDB URI from .env file
+
+mongoose.connect(mongoURI, { useNewUrlParser: true, useUnifiedTopology: true })
+  .then(() => console.log('Connected to MongoDB'))
+  .catch((err) => console.log('MongoDB connection error:', err));
+
+  
 // Define a User schema
 const userSchema = new mongoose.Schema({
   userId: { type: String, required: true },
