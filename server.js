@@ -5,10 +5,12 @@ const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 require('dotenv').config(); // To load environment variables
-
+const cookieParaser = require("cookie-parser");
 // Initialize the Express app
 const app = express();
 const PORT = process.env.PORT || 5000; // Default to port 5000 or use environment variable for production
+
+app.use(cookieParaser()) ;
 
 // Middleware to parse JSON data
 app.use(bodyParser.json());
@@ -20,9 +22,20 @@ app.use(cors());
 const mongoose = require('mongoose');
 const mongoURI = process.env.MONGO_URI; // Get the MongoDB URI from .env file
 
-mongoose.connect(mongoURI, { useNewUrlParser: true, useUnifiedTopology: true })
-  .then(() => console.log('Connected to MongoDB'))
-  .catch((err) => console.log('MongoDB connection error:', err));
+mongoose
+  .connect(mongoURI, { useNewUrlParser: true, useUnifiedTopology: true })
+  .then(async (data) => {
+    console.log("Connected to MongoDB");
+    console.log("Host:", data.connection.host);
+    console.log("Database Name:", data.connection.name);
+
+    const collections = await data.connection.db.listCollections().toArray();
+    const collectionNames = collections.map((collection) => collection.name);
+    console.log("Collections:", collectionNames);
+  })
+  .catch((err) => console.error("MongoDB connection error:", err));
+
+
 
 // Define a User schema with bcryptjs for password hashing
 const userSchema = new mongoose.Schema({
@@ -38,7 +51,7 @@ userSchema.pre('save', async function(next) {
   next();
 });
 
-const User = mongoose.model('User', userSchema);
+const User = mongoose.models.User || mongoose.model('User', userSchema);
 
 // Register API Endpoint
 app.post('/register', async (req, res) => {
@@ -57,11 +70,15 @@ app.post('/register', async (req, res) => {
     }
 
     // Create a new user
-    const newUser = new User({ userId, password });
-    await newUser.save();
-
+    // const newUser = new User({ userId, password });
+    // await newUser.save();
+    const newUser = await User.create({
+        userId,password
+    });
+    
     return res.status(201).json({ message: 'User registered successfully!' });
   } catch (err) {
+    console.log(err);
     return res.status(500).json({ message: 'Server error', error: err.message });
   }
 });
@@ -85,12 +102,16 @@ app.post('/login', async (req, res) => {
 
     // Compare password with hashed password stored in DB
     const isMatch = await bcrypt.compare(password, user.password);
-
+    
     if (isMatch) {
       // Generate JWT token
       const token = jwt.sign({ userId: user.userId }, 'your_jwt_secret_key', { expiresIn: '1h' });
 
-      return res.status(200).json({ message: 'Login successful!', token });
+      return res.status(200)
+      .cookie("token",token,{
+        httpOnly:true,secure:true
+      })
+      .json({ message: 'Login successful!', token });
     } else {
       return res.status(401).json({ message: 'Invalid credentials.' });
     }
