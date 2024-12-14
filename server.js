@@ -2,12 +2,11 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
-const mongoose = require('mongoose');
-require('dotenv').config(); // Load environment variables from .env
+
 
 // Initialize the Express app
 const app = express();
-const PORT = process.env.PORT || 5000; // Use PORT from environment variables or default to 5000
+const PORT = 5000;
 
 // Middleware to parse JSON data
 app.use(bodyParser.json());
@@ -15,45 +14,34 @@ app.use(bodyParser.json());
 // Enable CORS
 app.use(cors());
 
-// Connect to MongoDB
+// Connect to MongoDB (Digital Ocean Cloud MongoDB)
+
+require('dotenv').config(); // This will load the .env file and make the variables available
+
+const mongoose = require('mongoose');
 const mongoURI = process.env.MONGO_URI; // Get the MongoDB URI from .env file
+
 mongoose.connect(mongoURI, { useNewUrlParser: true, useUnifiedTopology: true })
   .then(() => console.log('Connected to MongoDB'))
   .catch((err) => console.log('MongoDB connection error:', err));
 
+  
 // Define a User schema
 const userSchema = new mongoose.Schema({
-  userId: { type: String, required: true, unique: true }, // Ensure userId is unique
+  userId: { type: String, required: true },
   password: { type: String, required: true },
 });
 
 const User = mongoose.model('User', userSchema);
 
-// Register API endpoint (allows users to register with their own userId and password)
-app.post('/register', async (req, res) => {
-  const { userId, password } = req.body;
-
-  // Validate input
-  if (!userId || !password) {
-    return res.status(400).json({ message: 'User ID and password are required.' });
+// Seed default user into the database
+(async () => {
+  const existingUser = await User.findOne({ userId: 'Ajay' });
+  if (!existingUser) {
+    await User.create({ userId: 'Ajay', password: 'Ajay@9164' });
+    console.log('Default user created');
   }
-
-  try {
-    // Check if userId already exists
-    const existingUser = await User.findOne({ userId });
-    if (existingUser) {
-      return res.status(400).json({ message: 'User ID already exists. Please choose another one.' });
-    }
-
-    // Create a new user
-    const newUser = new User({ userId, password });
-    await newUser.save();
-
-    return res.status(201).json({ message: 'User registered successfully!' });
-  } catch (err) {
-    return res.status(500).json({ message: 'Server error', error: err.message });
-  }
-});
+})();
 
 // Login API endpoint
 app.post('/login', async (req, res) => {
@@ -64,8 +52,8 @@ app.post('/login', async (req, res) => {
     return res.status(400).json({ message: 'User ID and password are required.' });
   }
 
+  // Check credentials
   try {
-    // Check credentials
     const user = await User.findOne({ userId, password });
 
     if (user) {
