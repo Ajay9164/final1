@@ -16,10 +16,9 @@ app.use(cors());
 
 // Connect to MongoDB (Digital Ocean Cloud MongoDB)
 const mongoURI = 'mongodb+srv://login_api:eD1Fb9jM2803vJ76@appointment-db-c887a00a.mongo.ondigitalocean.com/login?replicaSet=appointment-db&tls=true&authSource=admin';
-mongoose.connect(mongoURI, { useNewUrlParser: true, useUnifiedTopology: true })
+mongoose.connect(mongoURI)
   .then(() => console.log('Connected to Digital Ocean MongoDB'))
-  .catch((err) => console.error('Failed to connect to MongoDB', err));
-
+  .catch((err) => console.error('Error connecting to MongoDB:', err));
 // Define a User schema
 const userSchema = new mongoose.Schema({
   userId: { type: String, required: true },
@@ -49,7 +48,7 @@ app.post('/login', async (req, res) => {
   // Check credentials
   try {
     const user = await User.findOne({ userId, password });
-    
+
     if (user) {
       return res.status(200).json({ message: 'Login successful!' });
     } else {
