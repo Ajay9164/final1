@@ -6,7 +6,7 @@ const mongoose = require('mongoose');
 
 // Initialize the Express app
 const app = express();
-const PORT = 3000;
+const PORT = 5000;
 
 // Middleware to parse JSON data
 app.use(bodyParser.json());
@@ -49,6 +49,7 @@ app.post('/login', async (req, res) => {
   // Check credentials
   try {
     const user = await User.findOne({ userId, password });
+    
     if (user) {
       return res.status(200).json({ message: 'Login successful!' });
     } else {
