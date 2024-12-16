@@ -5,12 +5,13 @@ const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 require('dotenv').config(); // To load environment variables
-const cookieParaser = require("cookie-parser");
+const cookieParser = require("cookie-parser");
+
 // Initialize the Express app
 const app = express();
 const PORT = process.env.PORT || 5000; // Default to port 5000 or use environment variable for production
 
-app.use(cookieParaser()) ;
+app.use(cookieParser());
 
 // Middleware to parse JSON data
 app.use(bodyParser.json());
@@ -34,8 +35,6 @@ mongoose
     console.log("Collections:", collectionNames);
   })
   .catch((err) => console.error("MongoDB connection error:", err));
-
-
 
 // Define a User schema with bcryptjs for password hashing
 const userSchema = new mongoose.Schema({
@@ -70,11 +69,7 @@ app.post('/register', async (req, res) => {
     }
 
     // Create a new user
-    // const newUser = new User({ userId, password });
-    // await newUser.save();
-    const newUser = await User.create({
-        userId,password
-    });
+    const newUser = await User.create({ userId, password });
     
     return res.status(201).json({ message: 'User registered successfully!' });
   } catch (err) {
@@ -108,14 +103,42 @@ app.post('/login', async (req, res) => {
       const token = jwt.sign({ userId: user.userId }, 'your_jwt_secret_key', { expiresIn: '1h' });
 
       return res.status(200)
-      .cookie("token",token,{
-        httpOnly:true,secure:true
-      })
-      .json({ message: 'Login successful!', token });
+        .cookie("token", token, { httpOnly: true, secure: true })
+        .json({ message: 'Login successful!', token });
     } else {
       return res.status(401).json({ message: 'Invalid credentials.' });
     }
   } catch (err) {
+    return res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+// Password Reset Endpoint
+app.post('/reset-password', async (req, res) => {
+  const { userId, newPassword } = req.body;
+
+  // Validate input
+  if (!userId || !newPassword) {
+    return res.status(400).json({ message: 'User ID and new password are required.' });
+  }
+
+  try {
+    // Find user by userId
+    const user = await User.findOne({ userId });
+    if (!user) {
+      return res.status(404).json({ message: 'User not found.' });
+    }
+
+    // Hash the new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    // Update the password in the database
+    user.password = hashedPassword;
+    await user.save();
+
+    return res.status(200).json({ message: 'Password reset successfully!' });
+  } catch (err) {
+    console.error(err);
     return res.status(500).json({ message: 'Server error', error: err.message });
   }
 });
