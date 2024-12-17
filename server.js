@@ -114,25 +114,45 @@ app.post('/login', async (req, res) => {
 });
 
 // Password Reset Endpoint
+// Password Reset Endpoint
 app.post('/reset-password', async (req, res) => {
-  const { userId, newPassword } = req.body;
+  const { currentPassword, newPassword, confirmPassword } = req.body;
 
   // Validate input
-  if (!userId || !newPassword) {
-    return res.status(400).json({ message: 'User ID and new password are required.' });
+  if (!currentPassword || !newPassword || !confirmPassword) {
+    return res.status(400).json({ message: 'Current password, new password, and confirm password are required.' });
+  }
+
+  // Check if newPassword and confirmPassword match
+  if (newPassword !== confirmPassword) {
+    return res.status(400).json({ message: 'New password and confirm password do not match.' });
   }
 
   try {
+    // Get the user from the JWT token or from the database
+    const token = req.cookies.token;  // Assuming you're storing the token in a cookie
+    if (!token) {
+      return res.status(401).json({ message: 'Unauthorized access. No token provided.' });
+    }
+
+    // Verify the JWT token and extract userId
+    const decoded = jwt.verify(token, 'your_jwt_secret_key');
+    const userId = decoded.userId;
+
     // Find user by userId
     const user = await User.findOne({ userId });
     if (!user) {
       return res.status(404).json({ message: 'User not found.' });
     }
 
-    // Hash the new password
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    // Compare the current password with the one stored in the database
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!isMatch) {
+      return res.status(401).json({ message: 'Current password is incorrect.' });
+    }
 
-    // Update the password in the database
+    // Hash the new password and update it
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
     user.password = hashedPassword;
     await user.save();
 
@@ -142,6 +162,7 @@ app.post('/reset-password', async (req, res) => {
     return res.status(500).json({ message: 'Server error', error: err.message });
   }
 });
+
 
 // Start the server
 app.listen(PORT, () => {
