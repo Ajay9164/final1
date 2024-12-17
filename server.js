@@ -113,9 +113,25 @@ app.post('/login', async (req, res) => {
   }
 });
 
+// Middleware to authenticate JWT token
+const authenticateToken = (req, res, next) => {
+  const token = req.cookies.token || req.headers['authorization'];
+
+  if (!token) {
+    return res.status(401).json({ message: 'Access denied. No token provided.' });
+  }
+
+  jwt.verify(token, 'your_jwt_secret_key', (err, user) => {
+    if (err) {
+      return res.status(403).json({ message: 'Token is not valid.' });
+    }
+    req.user = user;
+    next();
+  });
+};
+
 // Password Reset Endpoint
-// Password Reset Endpoint
-app.post('/reset-password', async (req, res) => {
+app.post('/reset-password', authenticateToken, async (req, res) => {
   const { currentPassword, newPassword, confirmPassword } = req.body;
 
   // Validate input
@@ -123,36 +139,28 @@ app.post('/reset-password', async (req, res) => {
     return res.status(400).json({ message: 'Current password, new password, and confirm password are required.' });
   }
 
-  // Check if newPassword and confirmPassword match
   if (newPassword !== confirmPassword) {
     return res.status(400).json({ message: 'New password and confirm password do not match.' });
   }
 
   try {
-    // Get the user from the JWT token or from the database
-    const token = req.cookies.token;  // Assuming you're storing the token in a cookie
-    if (!token) {
-      return res.status(401).json({ message: 'Unauthorized access. No token provided.' });
-    }
-
-    // Verify the JWT token and extract userId
-    const decoded = jwt.verify(token, 'your_jwt_secret_key');
-    const userId = decoded.userId;
-
-    // Find user by userId
-    const user = await User.findOne({ userId });
+    // Find user from the JWT token's userId
+    const user = await User.findOne({ userId: req.user.userId });
     if (!user) {
       return res.status(404).json({ message: 'User not found.' });
     }
 
-    // Compare the current password with the one stored in the database
+    // Compare current password with hashed password stored in DB
     const isMatch = await bcrypt.compare(currentPassword, user.password);
+    
     if (!isMatch) {
       return res.status(401).json({ message: 'Current password is incorrect.' });
     }
 
-    // Hash the new password and update it
+    // Hash the new password
     const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    // Update the password in the database
     user.password = hashedPassword;
     await user.save();
 
@@ -162,7 +170,6 @@ app.post('/reset-password', async (req, res) => {
     return res.status(500).json({ message: 'Server error', error: err.message });
   }
 });
-
 
 // Start the server
 app.listen(PORT, () => {
