@@ -3,14 +3,14 @@ const bodyParser = require('body-parser');
 const bcrypt = require('bcrypt');
 const session = require('express-session');
 const cors = require('cors');
-const Redis = require('redis');
-const RedisStore = require('connect-redis').default;  // Correct import for the latest version
+const { createClient } = require('redis');
+const connectRedis = require('connect-redis');
 
-// Create and configure Redis client
-const redisClient = Redis.createClient({
-    host: 'your-redis-host',  // Use your Redis host, e.g., 'localhost' or a DigitalOcean Redis URL
-    port: 6379,  // Default Redis port
-    password: 'your-redis-password',  // If applicable (for cloud Redis)
+// Initialize Redis client
+const redisClient = createClient({
+    host: 'your-redis-host',  // Replace with your Redis host
+    port: 6379,               // Default Redis port
+    password: 'your-redis-password',  // Replace with your Redis password, if applicable
 });
 
 // Initialize Express app
@@ -25,10 +25,13 @@ app.use(cors({
 }));
 app.use(bodyParser.json());
 
+// Initialize Redis store
+const RedisStore = connectRedis(session);
+
 // Use Redis for session storage
 app.use(session({
     store: new RedisStore({ client: redisClient }),
-    secret: 'your_secret_key',  // Secret key for encrypting sessions
+    secret: 'your_secret_key',  // Replace with your secret key
     resave: false,
     saveUninitialized: true,
     cookie: {
