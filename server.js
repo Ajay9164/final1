@@ -1,177 +1,86 @@
-// Import required modules
 const express = require('express');
 const bodyParser = require('body-parser');
-const cors = require('cors');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-require('dotenv').config(); // To load environment variables
-const cookieParser = require("cookie-parser");
+const bcrypt = require('bcrypt');
+const session = require('express-session');
+const cors = require('cors'); // Import CORS
 
-// Initialize the Express app
+// Initialize Express app
 const app = express();
-const PORT = process.env.PORT || 5000; // Default to port 5000 or use environment variable for production
+const port = 5000;
 
-app.use(cookieParser());
-
-// Middleware to parse JSON data
+// Middleware
+app.use(cors({ // Enable CORS for all origins
+    origin: '*', // Change to specific origins if needed
+    methods: ['GET', 'POST'], // Allowed HTTP methods
+    allowedHeaders: ['Content-Type'], // Allowed headers
+}));
 app.use(bodyParser.json());
+app.use(session({
+    secret: 'your_secret_key',
+    resave: false,
+    saveUninitialized: true,
+}));
 
-// Enable CORS
-app.use(cors());
-
-// Connect to MongoDB (Digital Ocean Cloud MongoDB)
-const mongoose = require('mongoose');
-const mongoURI = process.env.MONGO_URI; // Get the MongoDB URI from .env file
-
-mongoose
-  .connect(mongoURI, { useNewUrlParser: true, useUnifiedTopology: true })
-  .then(async (data) => {
-    console.log("Connected to MongoDB");
-    console.log("Host:", data.connection.host);
-    console.log("Database Name:", data.connection.name);
-
-    const collections = await data.connection.db.listCollections().toArray();
-    const collectionNames = collections.map((collection) => collection.name);
-    console.log("Collections:", collectionNames);
-  })
-  .catch((err) => console.error("MongoDB connection error:", err));
-
-// Define a User schema with bcryptjs for password hashing
-const userSchema = new mongoose.Schema({
-  userId: { type: String, required: true, unique: true },
-  password: { type: String, required: true },
-});
-
-// Pre-save hook to hash password before saving it to DB
-userSchema.pre('save', async function(next) {
-  if (this.isModified('password')) {
-    this.password = await bcrypt.hash(this.password, 10);
-  }
-  next();
-});
-
-const User = mongoose.models.User || mongoose.model('User', userSchema);
-
-// Register API Endpoint
-app.post('/register', async (req, res) => {
-  const { userId, password } = req.body;
-
-  // Validate input
-  if (!userId || !password) {
-    return res.status(400).json({ message: 'User ID and password are required.' });
-  }
-
-  try {
-    // Check if userId already exists
-    const existingUser = await User.findOne({ userId });
-    if (existingUser) {
-      return res.status(400).json({ message: 'User ID already exists. Please choose another one.' });
+// In-memory user data
+let users = {
+    'admin': {
+        username: 'admin',
+        passwordHash: bcrypt.hashSync('admin', 10), // Default password is 'admin'
     }
-
-    // Create a new user
-    const newUser = await User.create({ userId, password });
-    
-    return res.status(201).json({ message: 'User registered successfully!' });
-  } catch (err) {
-    console.log(err);
-    return res.status(500).json({ message: 'Server error', error: err.message });
-  }
-});
-
-// Login API Endpoint
-app.post('/login', async (req, res) => {
-  const { userId, password } = req.body;
-
-  // Validate input
-  if (!userId || !password) {
-    return res.status(400).json({ message: 'User ID and password are required.' });
-  }
-
-  try {
-    // Find user by userId
-    const user = await User.findOne({ userId });
-
-    if (!user) {
-      return res.status(401).json({ message: 'Invalid credentials.' });
-    }
-
-    // Compare password with hashed password stored in DB
-    const isMatch = await bcrypt.compare(password, user.password);
-    
-    if (isMatch) {
-      // Generate JWT token
-      const token = jwt.sign({ userId: user.userId }, 'your_jwt_secret_key', { expiresIn: '1h' });
-
-      return res.status(200)
-        .cookie("token", token, { httpOnly: true, secure: true })
-        .json({ message: 'Login successful!', token });
-    } else {
-      return res.status(401).json({ message: 'Invalid credentials.' });
-    }
-  } catch (err) {
-    return res.status(500).json({ message: 'Server error', error: err.message });
-  }
-});
-
-// Middleware to authenticate JWT token
-const authenticateToken = (req, res, next) => {
-  const token = req.cookies.token || req.headers['authorization'];
-
-  if (!token) {
-    return res.status(401).json({ message: 'Access denied. No token provided.' });
-  }
-
-  jwt.verify(token, 'your_jwt_secret_key', (err, user) => {
-    if (err) {
-      return res.status(403).json({ message: 'Token is not valid.' });
-    }
-    req.user = user;
-    next();
-  });
 };
 
-// Password Reset Endpoint
-app.post('/reset-password', authenticateToken, async (req, res) => {
-  const { currentPassword, newPassword, confirmPassword } = req.body;
+// Middleware to check authentication
+function authenticate(req, res, next) {
+    if (req.session && req.session.user) {
+        next();
+    } else {
+        res.status(401).json({ message: 'Unauthorized. Please log in.' });
+    }
+}
 
-  // Validate input
-  if (!currentPassword || !newPassword || !confirmPassword) {
-    return res.status(400).json({ message: 'Current password, new password, and confirm password are required.' });
-  }
+// Login endpoint
+app.post('/login', (req, res) => {
+    const { username, password } = req.body;
 
-  if (newPassword !== confirmPassword) {
-    return res.status(400).json({ message: 'New password and confirm password do not match.' });
-  }
-
-  try {
-    // Find user from the JWT token's userId
-    const user = await User.findOne({ userId: req.user.userId });
+    // Check if user exists
+    const user = users[username];
     if (!user) {
-      return res.status(404).json({ message: 'User not found.' });
+        return res.status(401).json({ message: 'Invalid username or password' });
     }
 
-    // Compare current password with hashed password stored in DB
-    const isMatch = await bcrypt.compare(currentPassword, user.password);
-    
-    if (!isMatch) {
-      return res.status(401).json({ message: 'Current password is incorrect.' });
+    // Validate password
+    if (bcrypt.compareSync(password, user.passwordHash)) {
+        req.session.user = user; // Store user in session
+        res.json({ message: 'Login successful' });
+    } else {
+        res.status(401).json({ message: 'Invalid username or password' });
     }
-
-    // Hash the new password
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
-
-    // Update the password in the database
-    user.password = hashedPassword;
-    await user.save();
-
-    return res.status(200).json({ message: 'Password reset successfully!' });
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ message: 'Server error', error: err.message });
-  }
 });
 
-// Start the server
-app.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
+// Password reset endpoint
+app.post('/reset-password', authenticate, (req, res) => {
+    const { oldPassword, newPassword, confirmNewPassword } = req.body;
+
+    // Validate session user
+    const user = req.session.user;
+
+    // Check old password
+    if (!bcrypt.compareSync(oldPassword, user.passwordHash)) {
+        return res.status(400).json({ message: 'Old password is incorrect' });
+    }
+
+    // Check if new passwords match
+    if (newPassword !== confirmNewPassword) {
+        return res.status(400).json({ message: 'New passwords do not match' });
+    }
+
+    // Update password
+    user.passwordHash = bcrypt.hashSync(newPassword, 10);
+    users[user.username] = user; // Update in-memory user data
+    res.json({ message: 'Password updated successfully' });
+});
+
+// Start server
+app.listen(port, () => {
+    console.log(`Server running on http://localhost:${port}`);
 });
