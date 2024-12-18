@@ -1,153 +1,88 @@
-const express = require('express');
-const bodyParser = require('body-parser');
-const cors = require('cors');
-const bcrypt = require('bcryptjs');
-require('dotenv').config(); // To load environment variables
-const cookieParser = require('cookie-parser');
+const express = require("express");
+const mongoose = require("mongoose");
+const bcrypt = require("bcrypt");
+const bodyParser = require("body-parser");
+require("dotenv").config(); // Load environment variables
 
-// Initialize the Express app
+// Initialize app
 const app = express();
-const PORT = process.env.PORT || 5000; // Default to port 5000 or use environment variable for production
-
-app.use(cookieParser());
-
-// Middleware to parse JSON data
 app.use(bodyParser.json());
 
-// Enable CORS
-app.use(cors());
+// MongoDB connection
+const MONGO_URI = process.env.MONGO_URI;
+mongoose.connect(MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
+    .then(() => console.log("Connected to MongoDB"))
+    .catch((err) => console.error("MongoDB connection error:", err));
 
-// Connect to MongoDB (Digital Ocean Cloud MongoDB)
-const mongoose = require('mongoose');
-const mongoURI = process.env.MONGO_URI; // Get the MongoDB URI from .env file
-
-mongoose
-  .connect(mongoURI, { useNewUrlParser: true, useUnifiedTopology: true })
-  .then(async (data) => {
-    console.log("Connected to MongoDB");
-    console.log("Host:", data.connection.host);
-    console.log("Database Name:", data.connection.name);
-
-    const collections = await data.connection.db.listCollections().toArray();
-    const collectionNames = collections.map((collection) => collection.name);
-    console.log("Collections:", collectionNames);
-  })
-  .catch((err) => console.error("MongoDB connection error:", err));
-
-// Define a User schema with bcryptjs for password hashing
+// User schema
 const userSchema = new mongoose.Schema({
-  userId: { type: String, required: true, unique: true },
-  password: { type: String, required: true },
+    username: { type: String, required: true, unique: true },
+    password: { type: String, required: true }
 });
 
-// Pre-save hook to hash password before saving it to DB
-userSchema.pre('save', async function (next) {
-  if (this.isModified('password')) {
-    this.password = await bcrypt.hash(this.password, 10);
-  }
-  next();
-});
+const User = mongoose.model("User", userSchema);
 
-const User = mongoose.models.User || mongoose.model('User', userSchema);
+// Simulated session storage (use proper session management in production)
+let currentUser = null;
 
-// Create default user if it doesn't exist
-const createDefaultUser = async () => {
-  const user = await User.findOne({ userId: 'admin' });
-
-  if (!user) {
-    const defaultUser = new User({
-      userId: 'admin',
-      password: 'admin', // Default password
-    });
-    await defaultUser.save();
-    console.log("Default admin user created.");
-  }
+// Initialize admin user if not exists
+const initializeAdmin = async () => {
+    const existingAdmin = await User.findOne({ username: "admin" });
+    if (!existingAdmin) {
+        const hashedPassword = await bcrypt.hash("admin", 10);
+        await User.create({ username: "admin", password: hashedPassword });
+        console.log("Admin user initialized with default credentials.");
+    }
 };
+initializeAdmin();
 
-createDefaultUser();
+// Login API
+app.post("/login", async (req, res) => {
+    const { username, password } = req.body;
+    try {
+        const user = await User.findOne({ username });
+        if (!user) return res.status(404).json({ message: "User not found" });
 
-// Login API Endpoint
-app.post('/login', async (req, res) => {
-  const { userId, password } = req.body;
+        const isPasswordValid = await bcrypt.compare(password, user.password);
+        if (!isPasswordValid) return res.status(401).json({ message: "Invalid credentials" });
 
-  // Validate input
-  if (!userId || !password) {
-    return res.status(400).json({ message: 'User ID and password are required.' });
-  }
-
-  try {
-    // Only allow "admin" to log in
-    if (userId !== 'admin') {
-      return res.status(401).json({ message: 'Invalid username or password' });
+        // Set current user (for simplicity, no token used here)
+        currentUser = user;
+        res.status(200).json({ message: "Login successful" });
+    } catch (err) {
+        res.status(500).json({ message: "Internal server error", error: err.message });
     }
-
-    // Find user by userId
-    const user = await User.findOne({ userId: 'admin' });
-
-    if (!user) {
-      return res.status(401).json({ message: 'Invalid username or password' });
-    }
-
-    // Compare password with hashed password stored in DB
-    const isMatch = await bcrypt.compare(password, user.password);
-    
-    if (isMatch) {
-      return res.status(200).json({ message: 'Login successful' });
-    } else {
-      return res.status(401).json({ message: 'Invalid username or password' });
-    }
-  } catch (err) {
-    return res.status(500).json({ message: 'Server error', error: err.message });
-  }
 });
 
-// Password Reset API Endpoint
-app.post('/reset-password', async (req, res) => {
-  const { oldPassword, newPassword, confirmNewPassword } = req.body;
+// Reset Password API (no username required)
+app.post("/reset-password", async (req, res) => {
+    const { oldPassword, newPassword, confirmNewPassword } = req.body;
 
-  // Validate input
-  if (!oldPassword || !newPassword || !confirmNewPassword) {
-    return res.status(400).json({ message: 'Old password, new password, and confirm new password are required.' });
-  }
+    try {
+        if (!currentUser) return res.status(401).json({ message: "Unauthorized. Please login first." });
 
-  // Check if the new password and confirm password match
-  if (newPassword !== confirmNewPassword) {
-    return res.status(400).json({ message: 'New passwords do not match.' });
-  }
+        // Validate new password confirmation
+        if (newPassword !== confirmNewPassword) {
+            return res.status(400).json({ message: "New password and confirmation do not match" });
+        }
 
-  try {
-    // Only allow password reset for "admin"
-    const user = await User.findOne({ userId: 'admin' });
-    if (!user) {
-      return res.status(404).json({ message: 'User not found.' });
+        // Verify old password
+        const isOldPasswordValid = await bcrypt.compare(oldPassword, currentUser.password);
+        if (!isOldPasswordValid) return res.status(401).json({ message: "Old password is incorrect" });
+
+        // Update password
+        const hashedNewPassword = await bcrypt.hash(newPassword, 10);
+        currentUser.password = hashedNewPassword;
+        await currentUser.save();
+
+        res.status(200).json({ message: "Password reset successful" });
+    } catch (err) {
+        res.status(500).json({ message: "Internal server error", error: err.message });
     }
-
-    // Check if the old password matches the stored password
-    const isMatch = await bcrypt.compare(oldPassword, user.password);
-    if (!isMatch) {
-      return res.status(400).json({ message: 'Old password is incorrect.' });
-    }
-
-    // Check if the new password is the same as the old password
-    if (oldPassword === newPassword) {
-      return res.status(400).json({ message: 'New password cannot be the same as the old password.' });
-    }
-
-    // Hash the new password
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
-
-    // Update the password in the database
-    user.password = hashedPassword;
-    await user.save();
-
-    return res.status(200).json({ message: 'Password updated successfully!' });
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ message: 'Server error', error: err.message });
-  }
 });
 
-// Start the server
+// Start server
+const PORT = 5000;
 app.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
+    console.log(`Server running on http://localhost:${PORT}`);
 });
