@@ -8,9 +8,9 @@ const RedisStore = require('connect-redis').default;  // Correct import for the 
 
 // Create and configure Redis client
 const redisClient = Redis.createClient({
-    host: 'your-redis-server-host', // For example, 'localhost' or a Redis cloud service
-    port: 6379, // Default Redis port
-    password: 'your-redis-password', // If applicable (for cloud Redis)
+    host: 'your-redis-host',  // Use your Redis host, e.g., 'localhost' or a DigitalOcean Redis URL
+    port: 6379,  // Default Redis port
+    password: 'your-redis-password',  // If applicable (for cloud Redis)
 });
 
 // Initialize Express app
@@ -28,12 +28,12 @@ app.use(bodyParser.json());
 // Use Redis for session storage
 app.use(session({
     store: new RedisStore({ client: redisClient }),
-    secret: 'your_secret_key',
+    secret: 'your_secret_key',  // Secret key for encrypting sessions
     resave: false,
     saveUninitialized: true,
     cookie: {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production', // Set to 'true' for HTTPS in production
+        secure: process.env.NODE_ENV === 'production',  // Set to 'true' for HTTPS in production
     }
 }));
 
@@ -41,7 +41,7 @@ app.use(session({
 let users = {
     'admin': {
         username: 'admin',
-        passwordHash: bcrypt.hashSync('admin', 10),
+        passwordHash: bcrypt.hashSync('admin', 10),  // Default password hash for 'admin'
     }
 };
 
@@ -66,7 +66,7 @@ app.post('/login', (req, res) => {
 
     // Validate password
     if (bcrypt.compareSync(password, user.passwordHash)) {
-        req.session.user = user;
+        req.session.user = user;  // Save user info in session
         res.json({ message: 'Login successful' });
     } else {
         res.status(401).json({ message: 'Invalid username or password' });
