@@ -4,7 +4,7 @@ const bcrypt = require('bcrypt');
 const session = require('express-session');
 const cors = require('cors');
 const Redis = require('redis');
-const sessionRedis = require('connect-redis')(session);
+const RedisStore = require('connect-redis').default;  // Correct import for the latest version
 
 // Create and configure Redis client
 const redisClient = Redis.createClient({
@@ -27,7 +27,7 @@ app.use(bodyParser.json());
 
 // Use Redis for session storage
 app.use(session({
-    store: new sessionRedis({ client: redisClient }),
+    store: new RedisStore({ client: redisClient }),
     secret: 'your_secret_key',
     resave: false,
     saveUninitialized: true,
