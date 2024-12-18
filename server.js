@@ -1,12 +1,14 @@
-require('dotenv').config();  // Load environment variables from .env file
+// server.js
 
+require('dotenv').config();  // Load environment variables from .env file
 const express = require('express');
 const mongoose = require('mongoose');
 const session = require('express-session');
 const MongoStore = require('connect-mongo'); // MongoDB session store
 
 const app = express();
-const port = process.env.PORT || 5000;
+const port = 5000; // Directly setting the port (previously in .env)
+const sessionSecret = 'your-secret-key'; // Directly setting the session secret (previously in .env)
 
 // Use the MONGO_URI from .env file
 const mongoURI = process.env.MONGO_URI;
@@ -25,7 +27,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // Session configuration using MongoDB store
 app.use(session({
-  secret: 'your-secret-key', // Change this to a more secure key in production
+  secret: sessionSecret, // Using the sessionSecret variable directly
   resave: false,
   saveUninitialized: false,
   store: MongoStore.create({
@@ -34,7 +36,7 @@ app.use(session({
   }),
   cookie: {
     httpOnly: true,
-    secure: false, // Set to true if using HTTPS
+    secure: false, // Set to true if using HTTPS in production
     maxAge: 24 * 60 * 60 * 1000 // 24 hours
   }
 }));
@@ -81,7 +83,22 @@ app.post('/reset-password', (req, res) => {
   return res.status(200).send('Password updated successfully');
 });
 
-// Start server
+// Logout route
+app.post('/logout', (req, res) => {
+  req.session.destroy((err) => {
+    if (err) {
+      return res.status(500).send('Failed to logout');
+    }
+    return res.status(200).send('Logged out successfully');
+  });
+});
+
+// Test Route (just to check if the server is working)
+app.get('/', (req, res) => {
+  res.send('Server is running!');
+});
+
+// Start the server
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
 });
