@@ -82,7 +82,11 @@ app.post("/reset-password", async (req, res) => {
 });
 
 // Start server
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
+});
+
+app.get("/health", (req, res) => {
+  res.status(200).json({ message: "Healthy" });
 });
