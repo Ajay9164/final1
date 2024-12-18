@@ -2,10 +2,13 @@ const express = require("express");
 const mongoose = require("mongoose");
 const bcrypt = require("bcrypt");
 const bodyParser = require("body-parser");
+const cors = require("cors"); 
 require("dotenv").config(); // Load environment variables
 
 // Initialize app
 const app = express();
+
+app.use(cors());
 app.use(bodyParser.json());
 
 // MongoDB connection
