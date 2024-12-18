@@ -17,7 +17,7 @@
   "bugs": {
     "url": "https://github.com/Ajay9164/final1/issues"
   },
-  "homepage": "https://github.com/Ajay9164/final1#readme",
+  
   "description": "",
   "dependencies": {
     "bcrypt": "^5.1.1",
