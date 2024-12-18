@@ -3,11 +3,11 @@ const bodyParser = require('body-parser');
 const bcrypt = require('bcrypt');
 const session = require('express-session');
 const cors = require('cors');
-const { createClient } = require('redis');
+const redis = require('redis');
 const connectRedis = require('connect-redis');
 
-// Initialize Redis client
-const redisClient = createClient({
+// Create a Redis client
+const redisClient = redis.createClient({
     host: 'your-redis-host',  // Replace with your Redis host
     port: 6379,               // Default Redis port
     password: 'your-redis-password',  // Replace with your Redis password, if applicable
@@ -25,7 +25,7 @@ app.use(cors({
 }));
 app.use(bodyParser.json());
 
-// Initialize Redis store
+// Initialize RedisStore
 const RedisStore = connectRedis(session);
 
 // Use Redis for session storage
